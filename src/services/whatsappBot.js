@@ -50,6 +50,8 @@ class WhatsAppBot {
       BOOKING_CONFIRMED: 'BOOKING_CONFIRMED',
       CANCELLATION: 'CANCELLATION',
       RESCHEDULE: 'RESCHEDULE',
+      RESCHEDULE_TIME: 'RESCHEDULE_TIME',
+      SUPPORT: 'SUPPORT',
       VOICE_PROCESSING: 'VOICE_PROCESSING',
       AI_RECOMMENDATIONS: 'AI_RECOMMENDATIONS',
       NOTIFICATIONS: 'NOTIFICATIONS',
@@ -352,6 +354,12 @@ ${message}
         case this.STATES.REFERRAL_SYSTEM:
           await this.handleReferralSystem(userPhone, message, session);
           break;
+      case this.STATES.RESCHEDULE:
+        await this.handleRescheduleTimeSelection(userPhone, message, session);
+        break;
+      case this.STATES.SUPPORT:
+        await this.handleSupportRequest(userPhone);
+        break;
       default:
           await this.handleWelcomeState(userPhone, message, session);
       }
@@ -376,52 +384,40 @@ ${message}
   }
 
   async handleMainMenu(userPhone, message, session) {
-    const choice = message.trim();
-    
-    switch (choice) {
-      case '1':
+    try {
+      const userInput = message.toLowerCase();
+      
+      if (userInput === '1' || userInput.includes('book') || userInput.includes('health visit')) {
         session.state = this.STATES.LOCATION_CAPTURE;
         await updateUserSession(userPhone, session);
-        await this.requestLocation(userPhone);
-        break;
-      case '2':
-        await this.showUserBookings(userPhone);
-        break;
-      case '3':
-        await this.showCancellationOptions(userPhone);
-        break;
-      case '4':
-        await this.sendHelpMessage(userPhone);
-        break;
-      case '5':
+        await this.sendMainMenu(userPhone);
+      } else if (userInput === '2' || userInput.includes('view') || userInput.includes('bookings')) {
+        await this.handleViewBookings(userPhone, message, session);
+      } else if (userInput === '3' || userInput.includes('reschedule') || userInput.includes('cancel')) {
+        await this.handleRescheduleCancel(userPhone, message, session);
+      } else if (userInput === '4' || userInput.includes('help') || userInput.includes('call')) {
+        await this.handleSupportRequest(userPhone);
+      } else if (userInput === '5' || userInput.includes('notification')) {
         await this.handleNotifications(userPhone, message, session);
-        break;
-      case '6':
+      } else if (userInput === '6' || userInput.includes('loyalty')) {
         await this.handleLoyaltyProgram(userPhone, message, session);
-        break;
-      case '7':
+      } else if (userInput === '7' || userInput.includes('tracking') || userInput.includes('van')) {
         await this.handleVanTracking(userPhone, message, session);
-        break;
-      case '8':
+      } else if (userInput === '8' || userInput.includes('bundle')) {
         await this.handleBundleRecommendations(userPhone, message, session);
-        break;
-      case '9':
+      } else if (userInput === '9' || userInput.includes('refer')) {
         await this.handleReferralSystem(userPhone, message, session);
-        break;
-      default:
-        // Check if it's a health question (not a menu selection)
-        if (message.length > 20 && !/^[1-9]$/.test(message.trim())) {
-          // Send thinking bubble for health questions
-          await this.sendMessage(userPhone, this.createThinkingBubble());
-          
-          // Process with AI in background
-          setTimeout(async () => {
-            try {
-              const healthData = await this.getUserHealthData(userPhone);
-              const aiResponse = await this.getPersonalizedHealthAdvice(message, healthData);
-              
-              if (aiResponse) {
-                const intelligentResponse = `${aiResponse}
+      } else if (userInput.includes('voice') || userInput.includes('record')) {
+        await this.handleVoiceNote(userPhone, session);
+      } else if (userInput.includes('how') || userInput.includes('works')) {
+        await this.sendHowItWorks(userPhone);
+      } else {
+        // Use AI for intelligent responses to unexpected inputs
+        const healthData = await this.getUserHealthData(userPhone);
+        const aiResponse = await this.getPersonalizedHealthAdvice(message, healthData);
+        
+        if (aiResponse) {
+          const intelligentResponse = `${aiResponse}
 
 *Quick Actions:*
 1️⃣ Book a Health Visit
@@ -433,17 +429,26 @@ ${message}
 7️⃣ 🚐 Van Tracking
 8️⃣ 📦 Service Bundles
 9️⃣ 👥 Refer Friends`;
-                
-                await this.sendVoiceResponse(userPhone, intelligentResponse);
-              }
-            } catch (error) {
-              logger.error('AI processing error:', error);
-              await this.sendMessage(userPhone, this.createErrorBubble('AI processing failed. Please try again.'));
-            }
-          }, 2000);
+          
+          await this.sendMessageWithImage(userPhone, intelligentResponse, this.getRandomImage());
         } else {
-          await this.sendMessage(userPhone, this.createErrorBubble('Please select a valid option (1-9) or ask a health question.'));
+          const defaultResponse = `Please reply with:
+*1* - Book a Health Visit
+*2* - View My Bookings  
+*3* - Reschedule or Cancel Visit
+*4* - Call for Help
+*5* - 🔔 Smart Notifications
+*6* - 🏆 Loyalty Program
+*7* - 🚐 Van Tracking
+*8* - 📦 Service Bundles
+*9* - 👥 Refer Friends`;
+          
+          await this.sendMessage(userPhone, defaultResponse);
         }
+      }
+    } catch (error) {
+      logger.error('Error handling main menu:', error);
+      await this.sendMessage(userPhone, this.createErrorBubble('Sorry, there was an error processing your request. Please try again.'));
     }
   }
 
@@ -1761,6 +1766,581 @@ Reply with your choice (1-4).`;
     session.state = this.STATES.REFERRAL_SYSTEM;
     await updateUserSession(userPhone, session);
     await this.sendMessage(userPhone, referralMessage);
+  }
+
+  async handleRescheduleCancel(userPhone, message, session) {
+    try {
+      const userInput = message.toLowerCase();
+      
+      if (userInput.includes('cancel') || userInput === '1') {
+        // Handle cancellation
+        await this.handleCancellation(userPhone, session);
+      } else if (userInput.includes('reschedule') || userInput === '2') {
+        // Handle rescheduling
+        await this.handleRescheduling(userPhone, session);
+      } else if (userInput.includes('support') || userInput === '3') {
+        // Handle support request
+        await this.handleSupportRequest(userPhone);
+      } else {
+        // Show reschedule/cancel options
+        await this.showRescheduleCancelOptions(userPhone, session);
+      }
+    } catch (error) {
+      logger.error('Error handling reschedule/cancel:', error);
+      await this.sendMessage(userPhone, this.createErrorBubble('Sorry, there was an error processing your request. Please try again.'));
+    }
+  }
+
+  async handleCancellation(userPhone, session) {
+    try {
+      // Get user's active bookings
+      const healthData = await this.getUserHealthData(userPhone);
+      const activeBookings = healthData.bookings.filter(booking => 
+        booking.status === 'confirmed' && 
+        new Date(booking.date) > new Date()
+      );
+
+      if (activeBookings.length === 0) {
+        await this.sendMessage(userPhone, this.createInfoBubble('You have no active bookings to cancel.', '📋 No Active Bookings'));
+        return;
+      }
+
+      // Cancel the most recent booking
+      const latestBooking = activeBookings[activeBookings.length - 1];
+      latestBooking.status = 'cancelled';
+      latestBooking.cancelledAt = new Date();
+
+      // Update health data
+      await this.updateUserHealthData(userPhone, healthData);
+
+      // Refund logic (if payment was made)
+      if (session.data.paymentMethod) {
+        await this.processRefund(userPhone, latestBooking);
+      }
+
+      const cancellationMessage = `❌ *Booking Cancelled Successfully*
+
+📋 Booking ID: ${latestBooking.id}
+🩺 Service: ${latestBooking.service}
+📅 Date: ${latestBooking.date.toLocaleDateString()}
+⏰ Time: ${latestBooking.date.toLocaleTimeString()}
+
+💰 Refund Status: ${session.data.paymentMethod ? 'Processing' : 'No payment made'}
+
+*What's Next:*
+1️⃣ Book a new appointment
+2️⃣ View booking history
+3️⃣ Contact support
+
+Reply with your choice (1-3).`;
+
+      await this.sendMessageWithImage(userPhone, cancellationMessage, this.getRandomImage());
+      session.state = this.STATES.MAIN_MENU;
+      await updateUserSession(userPhone, session);
+
+    } catch (error) {
+      logger.error('Error handling cancellation:', error);
+      await this.sendMessage(userPhone, this.createErrorBubble('Sorry, there was an error cancelling your booking. Please contact support.'));
+    }
+  }
+
+  async handleRescheduling(userPhone, session) {
+    try {
+      // Get user's active bookings
+      const healthData = await this.getUserHealthData(userPhone);
+      const activeBookings = healthData.bookings.filter(booking => 
+        booking.status === 'confirmed' && 
+        new Date(booking.date) > new Date()
+      );
+
+      if (activeBookings.length === 0) {
+        await this.sendMessage(userPhone, this.createInfoBubble('You have no active bookings to reschedule.', '📋 No Active Bookings'));
+        return;
+      }
+
+      // Store rescheduling info in session
+      session.data.rescheduling = {
+        originalBooking: activeBookings[activeBookings.length - 1],
+        step: 'time_selection'
+      };
+
+      const rescheduleMessage = `🔄 *Reschedule Your Appointment*
+
+📋 Current Booking: ${activeBookings[activeBookings.length - 1].id}
+🩺 Service: ${activeBookings[activeBookings.length - 1].service}
+📅 Current Date: ${activeBookings[activeBookings.length - 1].date.toLocaleDateString()}
+
+🕒 *Select New Time Slot:*
+
+1️⃣ 🕒 Morning (9–11 AM)  
+2️⃣ 🌤 Midday (11 AM–1 PM)  
+3️⃣ ☀️ Afternoon (2–4 PM)
+
+Reply with the number (1-3) of your preferred new time slot.`;
+
+      await this.sendMessageWithImage(userPhone, rescheduleMessage, this.getRandomImage());
+      session.state = this.STATES.RESCHEDULE;
+      await updateUserSession(userPhone, session);
+
+    } catch (error) {
+      logger.error('Error handling rescheduling:', error);
+      await this.sendMessage(userPhone, this.createErrorBubble('Sorry, there was an error rescheduling your booking. Please try again.'));
+    }
+  }
+
+  async handleRescheduleTimeSelection(userPhone, message, session) {
+    try {
+      const timeSlot = this.TIME_SLOTS[message];
+      if (!timeSlot) {
+        await this.sendMessage(userPhone, this.createErrorBubble('Please select a valid time slot (1-3).'));
+        return;
+      }
+
+      // Update the original booking
+      const originalBooking = session.data.rescheduling.originalBooking;
+      originalBooking.date = new Date(); // Set to today with new time
+      originalBooking.timeSlot = timeSlot;
+      originalBooking.rescheduledAt = new Date();
+
+      // Update health data
+      const healthData = await this.getUserHealthData(userPhone);
+      const bookingIndex = healthData.bookings.findIndex(b => b.id === originalBooking.id);
+      if (bookingIndex !== -1) {
+        healthData.bookings[bookingIndex] = originalBooking;
+        await this.updateUserHealthData(userPhone, healthData);
+      }
+
+      const confirmationMessage = `✅ *Appointment Rescheduled Successfully*
+
+📋 Booking ID: ${originalBooking.id}
+🩺 Service: ${originalBooking.service}
+📅 New Date: ${originalBooking.date.toLocaleDateString()}
+🕒 New Time: ${timeSlot.name}
+
+*What's Next:*
+1️⃣ View updated booking
+2️⃣ Book another appointment
+3️⃣ Contact support
+
+Reply with your choice (1-3).`;
+
+      await this.sendMessageWithImage(userPhone, confirmationMessage, this.getRandomImage());
+      session.state = this.STATES.MAIN_MENU;
+      await updateUserSession(userPhone, session);
+
+    } catch (error) {
+      logger.error('Error handling reschedule time selection:', error);
+      await this.sendMessage(userPhone, this.createErrorBubble('Sorry, there was an error rescheduling your appointment. Please try again.'));
+    }
+  }
+
+  async handleSupportRequest(userPhone) {
+    try {
+      const supportMessage = `🆘 *MediPod Support*
+
+We're here to help! Choose your support option:
+
+1️⃣ 📞 Call Support (+254 700 000 000)
+2️⃣ 💬 WhatsApp Support (+254 700 000 001)
+3️⃣ 📧 Email Support (support@medipod.africa)
+4️⃣ 🚨 Emergency (999 or 112)
+
+*Common Issues:*
+• Payment problems
+• Location not found
+• Need to reschedule
+• Medical emergency
+
+*Quick Actions:*
+5️⃣ Book new appointment
+6️⃣ View my bookings
+7️⃣ Back to main menu
+
+Reply with your choice (1-7).`;
+
+      await this.sendMessageWithImage(userPhone, supportMessage, this.getRandomImage());
+      session.state = this.STATES.SUPPORT;
+      await updateUserSession(userPhone, session);
+
+    } catch (error) {
+      logger.error('Error handling support request:', error);
+      await this.sendMessage(userPhone, this.createErrorBubble('Sorry, there was an error connecting you to support. Please try calling us directly.'));
+    }
+  }
+
+  async showRescheduleCancelOptions(userPhone, session) {
+    try {
+      const optionsMessage = `🔄 *Reschedule or Cancel Appointment*
+
+What would you like to do?
+
+1️⃣ ❌ Cancel Visit
+2️⃣ 🔄 Reschedule Visit
+3️⃣ 🆘 Talk to Support
+
+*Your Active Bookings:*
+📋 ${session.data.bookingId || 'MPA-' + Date.now().toString().slice(-4)}
+🩺 ${session.data.service?.name || 'General Consultation'}
+📅 ${session.data.timeSlot?.name || 'Today at 11:00 AM'}
+
+Reply with your choice (1-3).`;
+
+      await this.sendMessageWithImage(userPhone, optionsMessage, this.getRandomImage());
+
+    } catch (error) {
+      logger.error('Error showing reschedule/cancel options:', error);
+      await this.sendMessage(userPhone, this.createErrorBubble('Sorry, there was an error loading your options. Please try again.'));
+    }
+  }
+
+  async processRefund(userPhone, booking) {
+    try {
+      // Simulate refund process
+      logger.info(`Processing refund for booking ${booking.id} to user ${userPhone}`);
+      
+      // In production, integrate with payment provider
+      const refundMessage = `💰 *Refund Processing*
+
+📋 Booking ID: ${booking.id}
+💳 Payment Method: ${booking.paymentMethod || 'Unknown'}
+💵 Amount: KES ${booking.amount || 0}
+
+⏳ Status: Processing
+📅 Expected: 3-5 business days
+
+You'll receive a confirmation once the refund is processed.`;
+
+      await this.sendMessage(userPhone, refundMessage);
+
+    } catch (error) {
+      logger.error('Error processing refund:', error);
+    }
+  }
+
+  async handleViewBookings(userPhone, message, session) {
+    try {
+      const healthData = await this.getUserHealthData(userPhone);
+      const recentBookings = healthData.bookings.slice(-5); // Last 5 bookings
+
+      if (recentBookings.length === 0) {
+        const noBookingsMessage = `📋 *Your Bookings*
+
+No bookings found. 
+
+*Quick Actions:*
+1️⃣ Book your first appointment
+2️⃣ Learn about our services
+3️⃣ Back to main menu
+
+Reply with your choice (1-3).`;
+
+        await this.sendMessageWithImage(userPhone, noBookingsMessage, this.getRandomImage());
+        return;
+      }
+
+      let bookingsMessage = `📋 *Your Recent Bookings*\n\n`;
+
+      recentBookings.forEach((booking, index) => {
+        const status = booking.status === 'confirmed' ? '✅ Confirmed' : 
+                      booking.status === 'cancelled' ? '❌ Cancelled' : 
+                      booking.status === 'completed' ? '✅ Completed' : '⏳ Pending';
+        
+        bookingsMessage += `${index + 1}️⃣ *${booking.id}*\n`;
+        bookingsMessage += `   🩺 ${booking.service}\n`;
+        bookingsMessage += `   📅 ${booking.date.toLocaleDateString()}\n`;
+        bookingsMessage += `   ⏰ ${booking.date.toLocaleTimeString()}\n`;
+        bookingsMessage += `   ${status}\n\n`;
+      });
+
+      bookingsMessage += `*Actions:*\n`;
+      bookingsMessage += `1️⃣ Book new appointment\n`;
+      bookingsMessage += `2️⃣ Reschedule latest booking\n`;
+      bookingsMessage += `3️⃣ Cancel latest booking\n`;
+      bookingsMessage += `4️⃣ Back to main menu\n\n`;
+      bookingsMessage += `Reply with your choice (1-4).`;
+
+      await this.sendMessageWithImage(userPhone, bookingsMessage, this.getRandomImage());
+
+    } catch (error) {
+      logger.error('Error handling view bookings:', error);
+      await this.sendMessage(userPhone, this.createErrorBubble('Sorry, there was an error loading your bookings. Please try again.'));
+    }
+  }
+
+  async handleCancellation(userPhone, session) {
+    try {
+      // Get user's active bookings
+      const healthData = await this.getUserHealthData(userPhone);
+      const activeBookings = healthData.bookings.filter(booking => 
+        booking.status === 'confirmed' && 
+        new Date(booking.date) > new Date()
+      );
+
+      if (activeBookings.length === 0) {
+        await this.sendMessage(userPhone, this.createInfoBubble('You have no active bookings to cancel.', '📋 No Active Bookings'));
+        return;
+      }
+
+      // Cancel the most recent booking
+      const latestBooking = activeBookings[activeBookings.length - 1];
+      latestBooking.status = 'cancelled';
+      latestBooking.cancelledAt = new Date();
+
+      // Update health data
+      await this.updateUserHealthData(userPhone, healthData);
+
+      // Refund logic (if payment was made)
+      if (session.data.paymentMethod) {
+        await this.processRefund(userPhone, latestBooking);
+      }
+
+      const cancellationMessage = `❌ *Booking Cancelled Successfully*
+
+📋 Booking ID: ${latestBooking.id}
+🩺 Service: ${latestBooking.service}
+📅 Date: ${latestBooking.date.toLocaleDateString()}
+⏰ Time: ${latestBooking.date.toLocaleTimeString()}
+
+💰 Refund Status: ${session.data.paymentMethod ? 'Processing' : 'No payment made'}
+
+*What's Next:*
+1️⃣ Book a new appointment
+2️⃣ View booking history
+3️⃣ Contact support
+
+Reply with your choice (1-3).`;
+
+      await this.sendMessageWithImage(userPhone, cancellationMessage, this.getRandomImage());
+      session.state = this.STATES.MAIN_MENU;
+      await updateUserSession(userPhone, session);
+
+    } catch (error) {
+      logger.error('Error handling cancellation:', error);
+      await this.sendMessage(userPhone, this.createErrorBubble('Sorry, there was an error cancelling your booking. Please contact support.'));
+    }
+  }
+
+  async handleRescheduling(userPhone, session) {
+    try {
+      // Get user's active bookings
+      const healthData = await this.getUserHealthData(userPhone);
+      const activeBookings = healthData.bookings.filter(booking => 
+        booking.status === 'confirmed' && 
+        new Date(booking.date) > new Date()
+      );
+
+      if (activeBookings.length === 0) {
+        await this.sendMessage(userPhone, this.createInfoBubble('You have no active bookings to reschedule.', '📋 No Active Bookings'));
+        return;
+      }
+
+      // Store rescheduling info in session
+      session.data.rescheduling = {
+        originalBooking: activeBookings[activeBookings.length - 1],
+        step: 'time_selection'
+      };
+
+      const rescheduleMessage = `🔄 *Reschedule Your Appointment*
+
+📋 Current Booking: ${activeBookings[activeBookings.length - 1].id}
+🩺 Service: ${activeBookings[activeBookings.length - 1].service}
+📅 Current Date: ${activeBookings[activeBookings.length - 1].date.toLocaleDateString()}
+
+🕒 *Select New Time Slot:*
+
+1️⃣ 🕒 Morning (9–11 AM)  
+2️⃣ 🌤 Midday (11 AM–1 PM)  
+3️⃣ ☀️ Afternoon (2–4 PM)
+
+Reply with the number (1-3) of your preferred new time slot.`;
+
+      await this.sendMessageWithImage(userPhone, rescheduleMessage, this.getRandomImage());
+      session.state = this.STATES.RESCHEDULE;
+      await updateUserSession(userPhone, session);
+
+    } catch (error) {
+      logger.error('Error handling rescheduling:', error);
+      await this.sendMessage(userPhone, this.createErrorBubble('Sorry, there was an error rescheduling your booking. Please try again.'));
+    }
+  }
+
+  async handleRescheduleTimeSelection(userPhone, message, session) {
+    try {
+      const timeSlot = this.TIME_SLOTS[message];
+      if (!timeSlot) {
+        await this.sendMessage(userPhone, this.createErrorBubble('Please select a valid time slot (1-3).'));
+        return;
+      }
+
+      // Update the original booking
+      const originalBooking = session.data.rescheduling.originalBooking;
+      originalBooking.date = new Date(); // Set to today with new time
+      originalBooking.timeSlot = timeSlot;
+      originalBooking.rescheduledAt = new Date();
+
+      // Update health data
+      const healthData = await this.getUserHealthData(userPhone);
+      const bookingIndex = healthData.bookings.findIndex(b => b.id === originalBooking.id);
+      if (bookingIndex !== -1) {
+        healthData.bookings[bookingIndex] = originalBooking;
+        await this.updateUserHealthData(userPhone, healthData);
+      }
+
+      const confirmationMessage = `✅ *Appointment Rescheduled Successfully*
+
+📋 Booking ID: ${originalBooking.id}
+🩺 Service: ${originalBooking.service}
+📅 New Date: ${originalBooking.date.toLocaleDateString()}
+🕒 New Time: ${timeSlot.name}
+
+*What's Next:*
+1️⃣ View updated booking
+2️⃣ Book another appointment
+3️⃣ Contact support
+
+Reply with your choice (1-3).`;
+
+      await this.sendMessageWithImage(userPhone, confirmationMessage, this.getRandomImage());
+      session.state = this.STATES.MAIN_MENU;
+      await updateUserSession(userPhone, session);
+
+    } catch (error) {
+      logger.error('Error handling reschedule time selection:', error);
+      await this.sendMessage(userPhone, this.createErrorBubble('Sorry, there was an error rescheduling your appointment. Please try again.'));
+    }
+  }
+
+  async handleSupportRequest(userPhone) {
+    try {
+      const supportMessage = `🆘 *MediPod Support*
+
+We're here to help! Choose your support option:
+
+1️⃣ 📞 Call Support (+254 700 000 000)
+2️⃣ 💬 WhatsApp Support (+254 700 000 001)
+3️⃣ 📧 Email Support (support@medipod.africa)
+4️⃣ 🚨 Emergency (999 or 112)
+
+*Common Issues:*
+• Payment problems
+• Location not found
+• Need to reschedule
+• Medical emergency
+
+*Quick Actions:*
+5️⃣ Book new appointment
+6️⃣ View my bookings
+7️⃣ Back to main menu
+
+Reply with your choice (1-7).`;
+
+      await this.sendMessageWithImage(userPhone, supportMessage, this.getRandomImage());
+      session.state = this.STATES.SUPPORT;
+      await updateUserSession(userPhone, session);
+
+    } catch (error) {
+      logger.error('Error handling support request:', error);
+      await this.sendMessage(userPhone, this.createErrorBubble('Sorry, there was an error connecting you to support. Please try calling us directly.'));
+    }
+  }
+
+  async showRescheduleCancelOptions(userPhone, session) {
+    try {
+      const optionsMessage = `🔄 *Reschedule or Cancel Appointment*
+
+What would you like to do?
+
+1️⃣ ❌ Cancel Visit
+2️⃣ 🔄 Reschedule Visit
+3️⃣ 🆘 Talk to Support
+
+*Your Active Bookings:*
+📋 ${session.data.bookingId || 'MPA-' + Date.now().toString().slice(-4)}
+🩺 ${session.data.service?.name || 'General Consultation'}
+📅 ${session.data.timeSlot?.name || 'Today at 11:00 AM'}
+
+Reply with your choice (1-3).`;
+
+      await this.sendMessageWithImage(userPhone, optionsMessage, this.getRandomImage());
+
+    } catch (error) {
+      logger.error('Error showing reschedule/cancel options:', error);
+      await this.sendMessage(userPhone, this.createErrorBubble('Sorry, there was an error loading your options. Please try again.'));
+    }
+  }
+
+  async processRefund(userPhone, booking) {
+    try {
+      // Simulate refund process
+      logger.info(`Processing refund for booking ${booking.id} to user ${userPhone}`);
+      
+      // In production, integrate with payment provider
+      const refundMessage = `💰 *Refund Processing*
+
+📋 Booking ID: ${booking.id}
+💳 Payment Method: ${booking.paymentMethod || 'Unknown'}
+💵 Amount: KES ${booking.amount || 0}
+
+⏳ Status: Processing
+📅 Expected: 3-5 business days
+
+You'll receive a confirmation once the refund is processed.`;
+
+      await this.sendMessage(userPhone, refundMessage);
+
+    } catch (error) {
+      logger.error('Error processing refund:', error);
+    }
+  }
+
+  async handleViewBookings(userPhone, message, session) {
+    try {
+      const healthData = await this.getUserHealthData(userPhone);
+      const recentBookings = healthData.bookings.slice(-5); // Last 5 bookings
+
+      if (recentBookings.length === 0) {
+        const noBookingsMessage = `📋 *Your Bookings*
+
+No bookings found. 
+
+*Quick Actions:*
+1️⃣ Book your first appointment
+2️⃣ Learn about our services
+3️⃣ Back to main menu
+
+Reply with your choice (1-3).`;
+
+        await this.sendMessageWithImage(userPhone, noBookingsMessage, this.getRandomImage());
+        return;
+      }
+
+      let bookingsMessage = `📋 *Your Recent Bookings*\n\n`;
+
+      recentBookings.forEach((booking, index) => {
+        const status = booking.status === 'confirmed' ? '✅ Confirmed' : 
+                      booking.status === 'cancelled' ? '❌ Cancelled' : 
+                      booking.status === 'completed' ? '✅ Completed' : '⏳ Pending';
+        
+        bookingsMessage += `${index + 1}️⃣ *${booking.id}*\n`;
+        bookingsMessage += `   🩺 ${booking.service}\n`;
+        bookingsMessage += `   📅 ${booking.date.toLocaleDateString()}\n`;
+        bookingsMessage += `   ⏰ ${booking.date.toLocaleTimeString()}\n`;
+        bookingsMessage += `   ${status}\n\n`;
+      });
+
+      bookingsMessage += `*Actions:*\n`;
+      bookingsMessage += `1️⃣ Book new appointment\n`;
+      bookingsMessage += `2️⃣ Reschedule latest booking\n`;
+      bookingsMessage += `3️⃣ Cancel latest booking\n`;
+      bookingsMessage += `4️⃣ Back to main menu\n\n`;
+      bookingsMessage += `Reply with your choice (1-4).`;
+
+      await this.sendMessageWithImage(userPhone, bookingsMessage, this.getRandomImage());
+
+    } catch (error) {
+      logger.error('Error handling view bookings:', error);
+      await this.sendMessage(userPhone, this.createErrorBubble('Sorry, there was an error loading your bookings. Please try again.'));
+    }
   }
 
   // Helper functions for loyalty and referrals
