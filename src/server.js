@@ -95,27 +95,40 @@ app.use('*', (req, res) => {
 // Initialize services and start server
 async function startServer() {
   try {
-    // Initialize database
-    await initializeDatabase();
-    logger.info('Database connected successfully');
+    // Initialize database with fallback
+    try {
+      await initializeDatabase();
+      logger.info('Database connected successfully');
+    } catch (error) {
+      logger.warn('⚠️  Database connection failed, running in fallback mode:', error.message);
+    }
 
-    // Initialize Redis
-    await initializeRedis();
-    logger.info('Redis connected successfully');
+    // Initialize Redis with fallback
+    try {
+      await initializeRedis();
+      logger.info('✅ Redis connected successfully');
+    } catch (error) {
+      logger.warn('⚠️  Redis connection failed, running in fallback mode:', error.message);
+    }
 
-    // Initialize WhatsApp bot
-    await initializeWhatsAppBot(io);
-    logger.info('WhatsApp bot initialized successfully');
+    // Initialize WhatsApp bot with fallback
+    try {
+      await initializeWhatsAppBot(io);
+      logger.info('🤖 WhatsApp Bot initialized successfully');
+    } catch (error) {
+      logger.warn('⚠️  WhatsApp Bot initialization failed, running in fallback mode:', error.message);
+    }
 
-    const PORT = process.env.PORT || 3000;
-    server.listen(PORT, () => {
-      logger.info(`🚀 MediPod WhatsApp Bot server running on port ${PORT}`);
-      logger.info(`📱 WhatsApp Bot: MediBot is ready to serve!`);
-      logger.info(`🩺 Health check: http://localhost:${PORT}/health`);
+    // Start server
+    const port = process.env.PORT || 3000;
+    server.listen(port, () => {
+      logger.info(`🚀 MediPod WhatsApp Bot server running on port ${port}`);
+      logger.info('📱 WhatsApp Bot: MediBot is ready to serve!');
+      logger.info(`🩺 Health check: http://localhost:${port}/health`);
     });
 
   } catch (error) {
-    logger.error('Failed to start server:', error);
+    logger.error('❌ Server startup failed:', error);
     process.exit(1);
   }
 }

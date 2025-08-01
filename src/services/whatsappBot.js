@@ -12,29 +12,39 @@ const { sendNotification } = require('../services/notification');
 
 class WhatsAppBot {
   constructor() {
-    // Initialize Groq AI
-    this.groq = new Groq({
-      apiKey: process.env.GROQ_API_KEY
-    });
+    // Initialize Groq AI with fallback
+    try {
+      this.groq = new Groq({
+        apiKey: process.env.GROQ_API_KEY || 'fallback_key'
+      });
+    } catch (error) {
+      logger.warn('⚠️  Groq AI initialization failed:', error.message);
+      this.groq = null;
+    }
 
     // Only initialize Twilio if credentials are provided
-    if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
-      // Validate Account SID format
-      if (!process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) {
-        console.error('❌ Invalid TWILIO_ACCOUNT_SID format. Must start with "AC"');
-        this.client = null;
+    try {
+      if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+        // Validate Account SID format
+        if (!process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) {
+          console.error('❌ Invalid TWILIO_ACCOUNT_SID format. Must start with "AC"');
+          this.client = null;
+        } else {
+          this.client = twilio(
+            process.env.TWILIO_ACCOUNT_SID,
+            process.env.TWILIO_AUTH_TOKEN
+          );
+        }
       } else {
-        this.client = twilio(
-          process.env.TWILIO_ACCOUNT_SID,
-          process.env.TWILIO_AUTH_TOKEN
-        );
+        this.client = null;
+        console.warn('⚠️  Twilio credentials not provided. WhatsApp bot will run in simulation mode.');
       }
-    } else {
+    } catch (error) {
+      logger.warn('⚠️  Twilio initialization failed:', error.message);
       this.client = null;
-      console.warn('⚠️  Twilio credentials not provided. WhatsApp bot will run in simulation mode.');
     }
     
-    this.fromNumber = process.env.TWILIO_PHONE_NUMBER;
+    this.fromNumber = process.env.TWILIO_PHONE_NUMBER || 'whatsapp:+1234567890';
     this.contentSid = process.env.TWILIO_CONTENT_SID;
     
     // Bot states with advanced features
